@@ -1,7 +1,10 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
+from bs4 import BeautifulSoup
 
 def scraper(url, resp):
+    print(f"Visiting {url}")
+
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
@@ -16,8 +19,29 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
-    # Testing this thing out.
-    return list()
+    # Check if the response status is not OK
+    if resp.status != 200:
+        print(f"Skipping {url}. Status code: {resp.status}")
+        return []  # Skip processing if the page is not accessible
+
+    links_list = []
+    try:
+        content = resp.raw_response.content
+        soup = BeautifulSoup(content, 'html.parser')
+
+
+        for tag in soup.find_all('a', href=True): # find all a tags copntain href attribute. Represent hyperlinks to other pages.
+            href = tag['href']
+
+            joined_url = urljoin(url, href) # Handle relative URLs by joining them with the base URL
+            clean_url, _ = urldefrag(joined_url) # Remove fragment from the URL (e.g., #section1)
+
+            links_list.append(clean_url)
+
+    except Exception as e:
+        print(f"Error parsing {url}: {e}")
+
+    return links_list
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -27,7 +51,19 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
-        return not re.match(
+        
+        # Check if URL is allowed
+        if not (
+            parsed.netloc.endswith(".ics.uci.edu") or
+            parsed.netloc.endswith(".cs.uci.edu") or
+            parsed.netloc.endswith(".informatics.uci.edu") or
+            parsed.netloc.endswith(".stat.uci.edu") or
+            (parsed.netloc == "today.uci.edu" and 
+             parsed.path.startswith("/department/information_computer_sciences"))
+        ):
+            return False
+        
+        if re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
@@ -35,7 +71,10 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower()):
+            return False
+
+        return True
 
     except TypeError:
         print ("TypeError for ", parsed)
