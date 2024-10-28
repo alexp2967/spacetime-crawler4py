@@ -22,6 +22,11 @@ class Worker(Thread):
             tbd_url = self.frontier.get_tbd_url()
             if not tbd_url:
                 self.logger.info("Frontier is empty. Stopping Crawler.")
+                print(scraper.unique_urls)
+                print(scraper.longest_page)
+                top_50 = scraper.get_top_50_words()
+                print(top_50)
+                print(scraper.subdomain_dict)
                 break
             resp = download(tbd_url, self.config, self.logger)
             self.logger.info(
