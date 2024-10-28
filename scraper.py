@@ -99,7 +99,7 @@ def extract_next_links(url, resp):
 
     # if status is not 200 return empty list
     if resp.status != 200 or resp.raw_response is None:
-        return list(hyper_set)
+        return []
 
     # setting up check to see if the page is unresponsive
     content = resp.raw_response.content.decode('utf-8', errors='ignore')  
@@ -109,23 +109,37 @@ def extract_next_links(url, resp):
         "err_too_many_redirects",
         "too many redirects",
         "don't have permission",
-        "server IP address could not be found"
+        "server IP address could not be found",
+        "don't have the required permissions.",
     ]
-    # if any of those unresponsive errors occur return empty list
-    if any(err in content.lower() for err in error_messages):
-        return list(hyper_set)  
+
+    login_required_phrases = [
+        "log in",
+        "sign in",
+        "access denied",
+        "restricted access",
+        "account required",
+        "you must be logged in",
+        "error",
+        "not logged in"
+    ]
+
+    # Skip if error or login is required
+    if any(err in content.lower() for err in error_messages) or any(phrase in content.lower() for phrase in login_required_phrases):
+        return []
 
     # use beautiful soup to get content of the URL
     content = resp.raw_response.content
     soup = BeautifulSoup(content, "html.parser")
+    text = soup.get_text(separator=' ')
 
     # tokenize the content in the URL and add them to the dictionary
-    tokens = tokenize(content)
+    tokens = tokenize(text)
     computeWordFrequencies(tokens)
 
     # if the page doesn't have a lot of content just ignore it
-    if len(tokens) < 500:
-        return list(hyper_set) 
+    if len(tokens) < 250:
+        return []
     
     # check to see if its the longest page
     if len(tokens) > longest_page["word_count"]:
@@ -137,7 +151,7 @@ def extract_next_links(url, resp):
         text = body.get_text(' | ', strip=True)
         num_text = text.count('|')
         if num_text < 40:
-            return list(hyper_set) 
+            return []
 
         # gets the hyperlink
         tags = soup.find_all('a', href=True)
@@ -188,6 +202,7 @@ def is_valid(url):
     "export", 
     "attachment", 
     "share=",
+    "format=",
     "makefile"
     ] 
 
@@ -217,15 +232,15 @@ def is_valid(url):
         
         # added more things to check in regex and also made it check if any of these things were in the query or path
         return (
-            not re.match(r".*\.(makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
-            not re.match(r".*\.(makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
+            not re.match(r".*\.(format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
+            not re.match(r".*\.(format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
             not re.match(
                 r".*\.(css|js|bmp|gif|jpe?g|ico"
                 r"|png|tiff?|mid|mp2|mp3|mp4"
                 r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
                 r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
                 r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-                r"|epub|dll|cnf|tgz|sha1|cpp|h|cc"
+                r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|php"
                 r"|thmx|mso|arff|rtf|jar|csv|txt|defs|inc|odc|sas|ppsx"
                 r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", 
                 parsed.query.lower()) and 
@@ -236,7 +251,7 @@ def is_valid(url):
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|defs|inc|odc|sas|ppsx"
-            + r"|thmx|mso|arff|rtf|jar|csv|txt"
+            + r"|thmx|mso|arff|rtf|jar|csv|txt|php"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower()))
 
     except TypeError:
