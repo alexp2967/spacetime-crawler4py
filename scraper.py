@@ -1,10 +1,41 @@
 import re
 from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
+from collections import defaultdict, Counter, deque
+
+
+# Globals for tracking data
+unique_urls = set()
+subdomain_counts = defaultdict(int)
+word_counter = Counter()
+longest_page = {"url": "", "word_count": 0}
+
+
+LOW_INFO_THRESHOLD = 50  # Minimum words required to consider a page informative
+LARGE_FILE_THRESHOLD = 5000  # Max allowable words before skipping large files
+
+def tokenize(text):
+    tokens = []
+    word = ""
+    for char in text:
+        if ('a' <= char <= 'z') or ('A' <= char <= 'Z') or ('0' <= char <= '9'):
+            word += char.lower()
+        else:
+            if word:
+                tokens.append(word)
+                word = ""  # Reset word
+    if word:
+        tokens.append(word)
+    return tokens
+
+def compute_word_frequencies(tokens):
+    frequencies = defaultdict(int)
+    for token in tokens:
+        frequencies[token] += 1
+    return dict(frequencies)
+
 
 def scraper(url, resp):
-    print(f"Visiting {url}")
-
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
@@ -22,21 +53,43 @@ def extract_next_links(url, resp):
     # Check if the response status is not OK
     if resp.status != 200:
         print(f"Skipping {url}. Status code: {resp.status}")
-        return []  # Skip processing if the page is not accessible
+        return []
 
     links_list = []
     try:
-        content = resp.raw_response.content
-        soup = BeautifulSoup(content, 'html.parser')
+        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+        text = soup.get_text(separator=' ')
+        tokens = tokenize(text)
 
+        # Check for low information content
+        if len(tokens) < LOW_INFO_THRESHOLD:
+            print(f"Skipping {url}: Low information content.")
+            return []
+
+        # Avoid very large files with low information value
+        if len(tokens) > LARGE_FILE_THRESHOLD:
+            print(f"Skipping {url}: File too large.")
+            return []
+        
+        # Update word counter
+        word_counter.update(tokens)
+
+        # Track longest page
+        if len(tokens) > longest_page["word_count"]:
+            longest_page.update({"url": url, "word_count": len(tokens)})
 
         for tag in soup.find_all('a', href=True): # find all a tags copntain href attribute. Represent hyperlinks to other pages.
             href = tag['href']
-
             joined_url = urljoin(url, href) # Handle relative URLs by joining them with the base URL
             clean_url, _ = urldefrag(joined_url) # Remove fragment from the URL (e.g., #section1)
-
             links_list.append(clean_url)
+
+            # Track unique URLs and subdomains
+            if clean_url not in unique_urls:
+                unique_urls.add(clean_url)
+                subdomain = urlparse(clean_url).netloc
+                if subdomain.endswith(".uci.edu"):
+                    subdomain_counts[subdomain] += 1
 
     except Exception as e:
         print(f"Error parsing {url}: {e}")
