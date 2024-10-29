@@ -99,34 +99,35 @@ def extract_next_links(url, resp):
 
     # if status is not 200 return empty list
     if resp.status != 200 or resp.raw_response is None:
-        return []
+        return list(hyper_set)
 
     # setting up check to see if the page is unresponsive
-    content = resp.raw_response.content.decode('utf-8', errors='ignore')  
     error_messages = [
         "this page isn't working",
         "redirected you too many times",
         "err_too_many_redirects",
-        "too many redirects",
+        "too many redirects", "under construction",
         "don't have permission",
         "server IP address could not be found",
-        "don't have the required permissions.",
-    ]
-
-    login_required_phrases = [
-        "log in",
-        "sign in",
+        "log in", "privileges are required",
+        "sign in", "can't be reached",
         "access denied",
-        "restricted access",
+        "restricted access", "required permissions",
         "account required",
         "you must be logged in",
-        "error",
-        "not logged in", "version"
+        "error", "no longer exists", "not found", "having trouble",
+        "not logged in", "version", "no events"
     ]
 
     # Skip if error or login is required
-    if any(err in content.lower() for err in error_messages) or any(phrase in content.lower() for phrase in login_required_phrases):
-        return []
+    content = resp.raw_response.content.decode('utf-8', errors='ignore') 
+    soup = BeautifulSoup(content, "html.parser")
+    text = soup.get_text(separator=' ')
+
+    for err in error_messages:
+        if err in text.lower():
+            return list(hyper_set)
+
 
     # use beautiful soup to get content of the URL
     content = resp.raw_response.content
@@ -139,42 +140,34 @@ def extract_next_links(url, resp):
 
     # if the page doesn't have a lot of content just ignore it
     if len(tokens) < 50:
-        return []
+        return list(hyper_set)
     
     # check to see if its the longest page
     if len(tokens) > longest_page["word_count"]:
         longest_page.update({"url": url, "word_count": len(tokens)})
 
-    # another check to see if the file is big enough, probs could delete idk
-    body = soup.find('body')
-    if body:
-        text = body.get_text(' | ', strip=True)
-        num_text = text.count('|')
-        if num_text < 40:
-            return []
+    # gets the hyperlink
+    tags = soup.find_all('a', href=True)
+    for link in tags:
+        href = link.get('href')
+        full_url = urljoin(resp.raw_response.url, href)
 
-        # gets the hyperlink
-        tags = soup.find_all('a', href=True)
-        for link in tags:
-            href = link.get('href')
-            full_url = urljoin(resp.raw_response.url, href)
+        # get rid of the fragments
+        parsed_url = urlparse(full_url)
+        unique_url = parsed_url._replace(fragment='').geturl()
 
-            # get rid of the fragments
-            parsed_url = urlparse(full_url)
-            unique_url = parsed_url._replace(fragment='').geturl()
-
-            # check again if the url is valid and also add to the list of subdomains
-            if is_valid(unique_url):
-                hyper_set.add(unique_url)
-                unique_urls.add(unique_url)
-                domain = parsed_url.netloc
-                if "uci.edu" in domain:
-                    subdomain = domain if domain.endswith("uci.edu") else ""
-                    if subdomain:
-                        if subdomain in subdomain_dict:
-                            subdomain_dict[subdomain] += 1
-                        else:
-                            subdomain_dict[subdomain] = 1
+        # check again if the url is valid and also add to the list of subdomains
+        if is_valid(unique_url):
+            hyper_set.add(unique_url)
+            unique_urls.add(unique_url)
+            domain = parsed_url.netloc
+            if "uci.edu" in domain:
+                subdomain = domain if domain.endswith("uci.edu") else ""
+                if subdomain:
+                    if subdomain in subdomain_dict:
+                        subdomain_dict[subdomain] += 1
+                    else:
+                        subdomain_dict[subdomain] = 1
     return list(hyper_set)  
 
 
@@ -234,17 +227,15 @@ def is_valid(url):
         
         # added more things to check in regex and also made it check if any of these things were in the query or path
         return (
-            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad)", parsed.query.lower()) and
-            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad)", parsed.path.lower()) and
-            not re.match(r".*\.(format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
-            not re.match(r".*\.(format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
+            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
+            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
             not re.match(
                 r".*\.(css|js|bmp|gif|jpe?g|ico"
                 r"|png|tiff?|mid|mp2|mp3|mp4"
                 r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
                 r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
                 r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-                r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|php"
+                r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|php|bw|cnt|bam"
                 r"|thmx|mso|arff|rtf|jar|csv|txt|defs|inc|odc|sas|ppsx"
                 r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", 
                 parsed.query.lower()) and 
