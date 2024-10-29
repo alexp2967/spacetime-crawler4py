@@ -1,18 +1,44 @@
 import re
-from urllib.parse import urlparse, urljoin, urldefrag
+from urllib.parse import urlparse, urljoin, urldefrag, parse_qs
 from bs4 import BeautifulSoup
-from collections import defaultdict, Counter, deque
+from collections import defaultdict, Counter
 
 
-# Globals for tracking data
-unique_urls = set()
-subdomain_counts = defaultdict(int)
-word_counter = Counter()
-longest_page = {"url": "", "word_count": 0}
-
-
+ALLOWED_DOMAINS = {
+    "ics.uci.edu",
+    "cs.uci.edu",
+    "informatics.uci.edu",
+    "stat.uci.edu",
+    "today.uci.edu"
+}
+ALLOWED_PATH_PREFIX = "today.uci.edu/department/information_computer_sciences"
 LOW_INFO_THRESHOLD = 50  # Minimum words required to consider a page informative
-LARGE_FILE_THRESHOLD = 5000  # Max allowable words before skipping large files
+STOP_WORDS = {
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", 
+    "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being", 
+    "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't", 
+    "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", 
+    "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", 
+    "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", "here's", "hers", 
+    "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", "i'm", "i've", 
+    "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", "let's", "me", "more", 
+    "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off", "on", "once", 
+    "only", "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own", 
+    "same", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't", "so", 
+    "some", "such", "than", "that", "that's", "the", "their", "theirs", "them", 
+    "themselves", "then", "there", "there's", "these", "they", "they'd", "they'll", 
+    "they're", "they've", "this", "those", "through", "to", "too", "under", "until", 
+    "up", "very", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", 
+    "weren't", "what", "what's", "when", "when's", "where", "where's", "which", "while", 
+    "who", "who's", "whom", "why", "why's", "with", "won't", "would", "wouldn't", 
+    "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"
+}
+
+unique_urls = set()
+longest_page_url = None
+max_word_count = 0
+word_frequencies = defaultdict(int)
+subdomain_counts = defaultdict(int)
 
 def tokenize(text):
     tokens = []
@@ -23,7 +49,7 @@ def tokenize(text):
         else:
             if word:
                 tokens.append(word)
-                word = ""  # Reset word
+                word = ""
     if word:
         tokens.append(word)
     return tokens
@@ -54,47 +80,49 @@ def extract_next_links(url, resp):
     if resp.status != 200:
         print(f"Skipping {url}. Status code: {resp.status}")
         return []
-
-    links_list = []
-    try:
-        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
-        text = soup.get_text(separator=' ')
-        tokens = tokenize(text)
-
-        # Check for low information content
-        if len(tokens) < LOW_INFO_THRESHOLD:
-            print(f"Skipping {url}: Low information content.")
+    
+    if not resp.raw_response or not resp.raw_response.content:
+        print(f"Skipping {url}. No content available.")
+        return []
+    
+    content = resp.raw_response.content.decode('utf-8', errors='ignore')
+    soup = BeautifulSoup(content, 'html.parser')
+    
+    # Check meta tags for 'robots' to filter out pages that shouldn't be indexed
+    meta_robots = soup.find('meta', attrs={'name': 'robots'})
+    if meta_robots:
+        content_value = meta_robots.get('content', '').lower()
+        if 'noindex' in content_value or 'nofollow' in content_value:
+            print(f"Skipping {url}: Marked with noindex or nofollow.")
             return []
+    
+    body = soup.find('body')
+    if not body:
+        print(f"Skipping {url}: No Body tags found")
+        return []
+    text = body.get_text(separator=' ')
+    tokens = tokenize(text)
 
-        # Avoid very large files with low information value
-        if len(tokens) > LARGE_FILE_THRESHOLD:
-            print(f"Skipping {url}: File too large.")
-            return []
-        
-        # Update word counter
-        word_counter.update(tokens)
+    # Check if this page is the longest so far
+    update_longest_page(url, tokens)
+    update_word_frequencies(tokens)
+    track_unique_url_and_subdomain(url)
 
-        # Track longest page
-        if len(tokens) > longest_page["word_count"]:
-            longest_page.update({"url": url, "word_count": len(tokens)})
+    if len(tokens) < LOW_INFO_THRESHOLD:
+        print(f"Skipping {url}: Low infomative pages).")
+        return []  # Skip low-content pages
 
-        for tag in soup.find_all('a', href=True): # find all a tags copntain href attribute. Represent hyperlinks to other pages.
-            href = tag['href']
-            joined_url = urljoin(url, href) # Handle relative URLs by joining them with the base URL
-            clean_url, _ = urldefrag(joined_url) # Remove fragment from the URL (e.g., #section1)
-            links_list.append(clean_url)
+    extracted_links = set()
+    # find all a tags copntain href attribute. Represent hyperlinks to other pages.
+    for tag in soup.find_all('a', href=True): 
+        href = tag.get("href")
+        full_url = urljoin(resp.raw_response.url, href) # Convert relative URLs to absolute
+        defragmented_url, _ = urldefrag(full_url)  # Remove URL fragments
 
-            # Track unique URLs and subdomains
-            if clean_url not in unique_urls:
-                unique_urls.add(clean_url)
-                subdomain = urlparse(clean_url).netloc
-                if subdomain.endswith(".uci.edu"):
-                    subdomain_counts[subdomain] += 1
+        if is_valid(defragmented_url):
+            extracted_links.add(defragmented_url)
 
-    except Exception as e:
-        print(f"Error parsing {url}: {e}")
-
-    return links_list
+    return list(extracted_links)
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -105,15 +133,16 @@ def is_valid(url):
         if parsed.scheme not in set(["http", "https"]):
             return False
         
-        # Check if URL is allowed
-        if not (
-            parsed.netloc.endswith(".ics.uci.edu") or
-            parsed.netloc.endswith(".cs.uci.edu") or
-            parsed.netloc.endswith(".informatics.uci.edu") or
-            parsed.netloc.endswith(".stat.uci.edu") or
-            (parsed.netloc == "today.uci.edu" and 
-             parsed.path.startswith("/department/information_computer_sciences"))
-        ):
+        # Check if the URL belongs to one of the allowed domains
+        if not any(domain in parsed.netloc for domain in ALLOWED_DOMAINS):
+            return False
+        
+        # For today.uci.edu, restrict to specific path
+        if "today.uci.edu" in parsed.netloc and not parsed.path.startswith(f"/{ALLOWED_PATH_PREFIX}"):
+            return False
+        
+        if contains_sortable_view_pattern(parsed):
+            print(f"Skipping {url}: Detected sortable view pattern.")
             return False
         
         if re.match(
@@ -126,9 +155,65 @@ def is_valid(url):
             + r"|thmx|mso|arff|rtf|jar|csv"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower()):
             return False
-
+        
+        trap_pattern = (
+            r"(calendar|events|login|sign[-_]?up|register|session|cart|view|edit|"
+            r"page=\d+|facebook\.com|news|version|.json|entries|ooad)"
+        )
+        if re.search(trap_pattern, url, re.IGNORECASE):
+            print(f"Skipping {url}: Trap pattern found")
+            return False
+        
         return True
 
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+
+def contains_sortable_view_pattern(parsed):
+    query_params = parse_qs(parsed.query)
+    # Example: Skip URLs with sortable query parameters like ?C=N;O=D
+    sortable_patterns = {"C", "O"}  # Common keys indicating sortable views
+    return any(key in sortable_patterns for key in query_params)
+
+def update_longest_page(url, tokens):
+    global longest_page_url, max_word_count
+    word_count = len(tokens)
+    if word_count > max_word_count:
+        max_word_count = word_count
+        longest_page_url = url
+
+def update_word_frequencies(tokens):
+    global word_frequencies
+    for token in tokens:
+        if token not in STOP_WORDS:
+            word_frequencies[token] += 1
+
+def track_unique_url_and_subdomain(url):
+    """Track unique URLs and subdomain counts."""
+    global unique_urls, subdomain_counts
+
+    defragmented_url, _ = urldefrag(url)
+
+    if defragmented_url in unique_urls:
+        return
+
+    unique_urls.add(defragmented_url)
+
+    # Extract and update subdomain counts if under uci.edu
+    parsed = urlparse(defragmented_url)
+    if parsed.hostname and parsed.hostname.endswith(".uci.edu"):
+        subdomain_counts[parsed.hostname] += 1
+
+def generate_report():
+    print(f"Total unique pages found: {len(unique_urls)}")
+    if longest_page_url:
+        print(f"Longest page: {longest_page_url} with {max_word_count} words")
+    common_words = Counter(word_frequencies).most_common(50)
+    print("Top 50 most common words:")
+    for word, freq in common_words:
+        print(f"{word}: {freq}")
+    
+    print("\nSubdomains found:")
+    for subdomain, count in sorted(subdomain_counts.items()):
+        print(f"{subdomain}, {count}")
