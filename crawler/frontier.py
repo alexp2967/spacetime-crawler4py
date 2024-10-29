@@ -60,6 +60,9 @@ class Frontier(object):
             self.save[urlhash] = (url, False)
             self.save.sync()
             self.to_be_downloaded.append(url)
+            with open("extracted_links.txt", "a") as file:
+                file.write(url + "\n")
+            file.close()
     
     def mark_url_complete(self, url):
         urlhash = get_urlhash(url)
