@@ -203,7 +203,7 @@ def is_valid(url):
     "attachment", 
     "share=",
     "format=",
-    "makefile", "events", "calendar"
+    "makefile", "calendar"
     ] 
 
     # dead url patterns
@@ -234,10 +234,10 @@ def is_valid(url):
         
         # added more things to check in regex and also made it check if any of these things were in the query or path
         return (
-            not re.match(r".*\.(calendar|events|login|register|session|cart|view|edit|facebook.com|.json|ooad)", parsed.query.lower()) and
-            not re.match(r".*\.(calendar|events|login|register|session|cart|view|edit|facebook.com|.json|ooad)", parsed.path.lower()) and
-            not re.match(r".*\.(events|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
-            not re.match(r".*\.(events|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
+            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad)", parsed.query.lower()) and
+            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad)", parsed.path.lower()) and
+            not re.match(r".*\.(format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
+            not re.match(r".*\.(format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
             not re.match(
                 r".*\.(css|js|bmp|gif|jpe?g|ico"
                 r"|png|tiff?|mid|mp2|mp3|mp4"
