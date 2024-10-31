@@ -35,7 +35,9 @@ stop_words = [
     "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", 
     "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", 
     "why's", "with", "won't", "would", "wouldn't", "you", "you'd", "you'll", 
-    "you're", "you've", "your", "yours", "yourself", "yourselves"
+    "you're", "you've", "your", "yours", "yourself", "yourselves", "s", "m", "d", "b",
+    "t", "n", "e", "o", "r", "l", "u", "p", "j", "h", "k", "w", "f", "v", "z", "c", "y",
+    "x", "g", "q", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"
 ]
 
 
