@@ -63,10 +63,11 @@ def tokenize(text_content: str) -> list:
 def computeWordFrequencies(tokens: list):
     # adding token and their frequencies in dictionary
     for token in tokens:
-        if token in frequency_dict and token not in stop_words:
-            frequency_dict[token] += 1
-        else:
-            frequency_dict[token] = 1
+        if token not in stop_words:
+            if token in frequency_dict:
+                frequency_dict[token] += 1
+            else:
+                frequency_dict[token] = 1
 
     
 
@@ -100,7 +101,7 @@ def extract_next_links(url, resp):
     hyper_set = set()
 
     # if status is not 200 return empty list
-    if resp.status != 200 or resp.raw_response is None:
+    if resp.status != 200 or resp.raw_response is None or resp.error is not None:
         return list(hyper_set)
 
     # setting up check to see if the page is unresponsive
@@ -126,6 +127,7 @@ def extract_next_links(url, resp):
     soup = BeautifulSoup(content, "html.parser")
     text = soup.get_text(separator=' ')
 
+
     for err in error_messages:
         if err in text.lower():
             return list(hyper_set)
@@ -136,13 +138,15 @@ def extract_next_links(url, resp):
     soup = BeautifulSoup(content, "html.parser")
     text = soup.get_text(separator=' ')
 
-    # tokenize the content in the URL and add them to the dictionary
+    # tokenize the content in the URL
     tokens = tokenize(text)
-    computeWordFrequencies(tokens)
 
     # if the page doesn't have a lot of content just ignore it
     if len(tokens) < 50:
         return list(hyper_set)
+    
+    # add them to the dictionary
+    computeWordFrequencies(tokens)
     
     # check to see if its the longest page
     if len(tokens) > longest_page["word_count"]:
