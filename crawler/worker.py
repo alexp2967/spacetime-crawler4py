@@ -37,7 +37,7 @@ class Worker(Thread):
 
                     # Write subdomains - if it's a dictionary, convert it to a string with formatting
                     file.write("SUBDOMAINS\n")
-                    for subdomain, count in scraper.subdomain_dict.items():
+                    for subdomain, count in sorted(scraper.subdomain_dict.items()):
                         file.write(f"{subdomain}: {count}\n")
                     file.close()
                 break
