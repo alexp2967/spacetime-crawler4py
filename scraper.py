@@ -231,18 +231,23 @@ def is_valid(url):
         if any(re.search(pattern, url) for pattern in dead_url_patterns):
             return False
         
+        unwanted_directory_pattern = r"./pdf/."
+
+        if re.search(unwanted_directory_pattern, url.lower()):
+            return False
+        
         # added more things to check in regex and also made it check if any of these things were in the query or path
         return (
-            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
-            not re.match(r".*\.(calendar|cart|view|edit|facebook.com|.json|ooad|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
+            not re.match(r".*\.(/pdf/|calendar|cart|view|edit|facebook.com|.json|ooad|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.query.lower()) and
+            not re.match(r".*\.(/pdf/|calendar|cart|view|edit|facebook.com|.json|ooad|format=|makefile|date=|share=|do=|action=|upload|download|ical|login|password|export|attachment)", parsed.path.lower()) and
             not re.match(
                 r".*\.(css|js|bmp|gif|jpe?g|ico"
                 r"|png|tiff?|mid|mp2|mp3|mp4"
                 r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
                 r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
                 r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-                r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|php|bw|cnt|bam"
-                r"|thmx|mso|arff|rtf|jar|csv|txt|defs|inc|odc|sas|ppsx"
+                r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|php|bw|cnt|bam|img"
+                r"|thmx|mso|arff|rtf|jar|csv|txt|defs|inc|odc|sas|ppsx|apk|asp|c|sql"
                 r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", 
                 parsed.query.lower()) and 
             not re.match(
@@ -250,8 +255,8 @@ def is_valid(url):
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|defs|inc|odc|sas|ppsx"
+            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|img"
+            + r"|epub|dll|cnf|tgz|sha1|cpp|h|cc|defs|inc|odc|sas|ppsx|apk|asp|c|sql"
             + r"|thmx|mso|arff|rtf|jar|csv|txt|php"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower()))
 
